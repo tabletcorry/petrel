@@ -1,8 +1,9 @@
+# .github/workflows/container_publish.yml
 name: Build & publish multi-arch (matrix)
 
 on:
   push:
-    branches: [main]
+    branches: [main]       # tweak as needed
 
 permissions:
   contents: read
@@ -14,21 +15,13 @@ env:
 jobs:
   build:
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          - arch: amd64
-            platform: linux/amd64
-            runs_on: ubuntu-latest
-          - arch: arm64
-            platform: linux/arm64
-            runs_on: ubuntu-latest   # or your self-hosted arm node
-    runs-on: ${{ matrix.runs_on }}
-
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest         # use self-hosted arm64 here to skip QEMU, if you have one
     steps:
       - uses: actions/checkout@v4
 
-      # Only needed on x86 runners
+      # QEMU is only useful on x86 runners
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
@@ -39,22 +32,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push by digest
-        id: b
+      - name: Build & push single-arch image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
-          platforms: ${{ matrix.platform }}
-          # Push *only* this arch and return its digest
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ env.IMAGE_NAME }}
-
-      # Expose the digest to the merge job
-      - name: Export digest
-        run: echo "digest=${{ steps.b.outputs.digest }}" >> $GITHUB_OUTPUT
-    outputs:
-      digest-${{ matrix.arch }}: ${{ steps.b.outputs.digest }}
+          file: ./Dockerfile            # change if needed
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
 
   merge:
     needs: build
@@ -67,9 +54,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create & push manifest
+      - name: Create & push multi-arch manifest
         run: |
           docker buildx imagetools create \
             -t $IMAGE_NAME:${{ github.sha }} \
-            $IMAGE_NAME@${{ needs.build.outputs.digest-amd64 }} \
-            $IMAGE_NAME@${{ needs.build.outputs.digest-arm64 }}
+            $IMAGE_NAME:${{ github.sha }}-amd64 \
+            $IMAGE_NAME:${{ github.sha }}-arm64
