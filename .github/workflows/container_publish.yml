@@ -1,47 +1,75 @@
-# .github/workflows/docker-publish.yml
-name: Build & publish multi-arch Docker image
+name: Build & publish multi-arch (matrix)
 
 on:
   push:
-    branches: [main]        # adjust to taste
+    branches: [main]
 
 permissions:
-  contents: read            # clone the repo
-  packages: write           # push to ghcr.io
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runs_on: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runs_on: ubuntu-latest   # or your self-hosted arm node
+    runs-on: ${{ matrix.runs_on }}
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 1️⃣  Install QEMU user-mode emulators so the runner can build non-native archs
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3          # latest major :contentReference[oaicite:0]{index=0}
+      # Only needed on x86 runners
+      - uses: docker/setup-qemu-action@v3
 
-      # 2️⃣  Start a Buildx builder (docker-container driver = multi-arch capable)
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3        # latest major :contentReference[oaicite:1]{index=1}
+      - uses: docker/setup-buildx-action@v3
 
-      # 3️⃣  Log in to GitHub Container Registry
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 4️⃣  Build & push a manifest list for amd64+arm64, tagged with the commit SHA
-      - name: Build and push
-        uses: docker/build-push-action@v6          # latest major :contentReference[oaicite:2]{index=2}
+      - name: Build & push by digest
+        id: b
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile          # change if your Dockerfile lives elsewhere
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          # Optional cache for faster rebuilds
-          cache-from: type=gha
-          cache-to:   type=gha,mode=max
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          # Push *only* this arch and return its digest
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.IMAGE_NAME }}
+
+      # Expose the digest to the merge job
+      - name: Export digest
+        run: echo "digest=${{ steps.b.outputs.digest }}" >> $GITHUB_OUTPUT
+    outputs:
+      digest-${{ matrix.arch }}: ${{ steps.b.outputs.digest }}
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create & push manifest
+        run: |
+          docker buildx imagetools create \
+            -t $IMAGE_NAME:${{ github.sha }} \
+            $IMAGE_NAME@${{ needs.build.outputs.digest-amd64 }} \
+            $IMAGE_NAME@${{ needs.build.outputs.digest-arm64 }}
