@@ -30,6 +30,3 @@ USER linuxbrew
 WORKDIR /home/linuxbrew
 
 ENV DEBIAN_FRONTEND=
-
-# Default command just shows the version; swap for your own entrypoint/CMD
-# CMD ["brew", "--version"]
