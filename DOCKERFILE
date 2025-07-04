@@ -1,0 +1,35 @@
+FROM debian:latest
+
+# Prevent any interactive APT prompts
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        vim ripgrep \
+        build-essential curl file git ca-certificates procps && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 linuxbrew && \
+    useradd --uid 1000 --gid linuxbrew --create-home --shell /bin/bash linuxbrew
+USER linuxbrew
+WORKDIR /home/linuxbrew
+
+# Install Homebrew (non-interactive)
+ENV NONINTERACTIVE=1
+RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Put brew on PATH for subsequent layers
+ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
+
+RUN brew install uv codex
+
+USER root
+RUN echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' \
+      >  /etc/profile.d/brew.sh
+
+USER linuxbrew
+WORKDIR /home/linuxbrew
+
+ENV DEBIAN_FRONTEND=
+
+# Default command just shows the version; swap for your own entrypoint/CMD
+# CMD ["brew", "--version"]
