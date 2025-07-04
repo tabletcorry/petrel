@@ -8,6 +8,8 @@ RUN apt-get update && \
         build-essential curl file git ca-certificates procps && \
     rm -rf /var/lib/apt/lists/*
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
 RUN groupadd --gid 1000 linuxbrew && \
     useradd --uid 1000 --gid linuxbrew --create-home --shell /bin/bash linuxbrew
 USER linuxbrew
@@ -20,7 +22,7 @@ RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/instal
 # Put brew on PATH for subsequent layers
 ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
-RUN brew install uv codex
+RUN brew install codex
 
 USER root
 RUN echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' \
