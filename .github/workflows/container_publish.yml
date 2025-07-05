@@ -1,10 +1,6 @@
 # .github/workflows/container_publish.yml
 name: Build & publish multi-arch (matrix)
 
-on:
-  push:
-    branches: [main]       # tweak as needed
-
 permissions:
   contents: read
   packages: write
