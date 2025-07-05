@@ -194,5 +194,49 @@ def codex(
     os.execvp(container_cmd[0], container_cmd)
 
 
+@main.command(name="build", context_settings={"help_option_names": ["-h", "--help"]})
+@click.option(
+    "--tag",
+    "-t",
+    default="codex",
+    show_default=True,
+    help="Container image tag to build.",
+)
+@click.option(
+    "--file",
+    "-f",
+    "dockerfile",
+    type=click.Path(path_type=Path, exists=True, file_okay=True, dir_okay=False),
+    default=Path("Dockerfile"),
+    show_default=True,
+    help="Path to the Dockerfile.",
+)
+@click.option(
+    "--context",
+    default=Path(),
+    show_default=True,
+    type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
+    help="Build context directory.",
+)
+@click.option(
+    "--no-auto-start",
+    is_flag=True,
+    help="Do not attempt to auto-start the container subsystem; error instead.",
+)
+def build(tag: str, dockerfile: Path, context: Path, no_auto_start: bool) -> None:
+    """Build the container image using the Dockerfile."""
+    try:
+        ensure_container_running(auto_start=not no_auto_start)
+    except ContainerError as exc:
+        click.echo(click.style(f"Error: {exc}", fg="red"), err=True)
+        sys.exit(1)
+
+    cmd = ["container", "build", "--tag", tag, "--file", str(dockerfile), str(context)]
+    click.echo(
+        click.style("Executing:", fg="green") + " " + " ".join(map(shlex.quote, cmd))
+    )
+    _run(cmd)
+
+
 if __name__ == "__main__":
     main()
