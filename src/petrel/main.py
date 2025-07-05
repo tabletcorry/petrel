@@ -70,7 +70,12 @@ def ensure_container_running(auto_start: bool = True) -> None:
         raise ContainerError("Failed to start the Apple container subsystem.") from exc
 
 
-@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+def main() -> None:
+    """Petrel CLI entry point."""
+
+
+@main.command(name="codex", context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--name",
     "-n",
@@ -127,7 +132,7 @@ def ensure_container_running(auto_start: bool = True) -> None:
     help="Do not attempt to auto-start the container subsystem; error instead.",
 )
 @click.argument("extra", nargs=-1, type=click.UNPROCESSED)
-def main(
+def codex(
     *,
     name: str,
     persistent_dir: Path,
