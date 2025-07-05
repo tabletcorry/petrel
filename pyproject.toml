@@ -51,4 +51,5 @@ ignore_missing_imports = false
 [dependency-groups]
 dev = [
     "mypy>=1.16.1",
+    "pre-commit>=4.2.0",
 ]
