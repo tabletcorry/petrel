@@ -1,19 +1,3 @@
-#!/usr/bin/env python3
-#
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["click>=8.1"]
-# ///
-#
-"""
-codex_cli.py – Convenience wrapper for running the Codex container on Apple’s
-new container subsystem.
-
-Requirements:
-    • Python 3.12+
-    • click 8.1+
-"""
-
 from __future__ import annotations
 
 import os
@@ -188,6 +172,7 @@ def main(
             [
                 uv_path,
                 "run",
+                "--isolated",
                 codex_path,
                 *extra,  # User-supplied passthrough args for Codex
             ]
