@@ -1,7 +1,7 @@
 [project]
 name = "petrel"
 version = "0.1.0"
-description = "Add your description here"
+description = "OpenAI Codex in Apple Containers"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -14,3 +14,41 @@ build-backend = "uv_build"
 
 [project.scripts]
 petrel = "petrel.main:main"
+
+[tool.ruff]
+fix = true
+unsafe-fixes = false
+
+[tool.ruff.lint]
+preview = true
+isort.split-on-trailing-comma = false
+select = ["ALL"]
+
+ignore = [
+    "D",
+    "DOC",
+    "CPY001",
+    "D203", "D213", "COM812", # Incompatible opinions
+    "T201",
+    "TRY003", "EM102",
+    "T203",
+    "EM101",
+    "FBT001", "FBT002",
+]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+preview = true
+
+[tool.mypy]
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict = true
+ignore_missing_imports = false
+
+[dependency-groups]
+dev = [
+    "mypy>=1.16.1",
+]

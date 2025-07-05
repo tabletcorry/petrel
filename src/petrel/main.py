@@ -1,3 +1,4 @@
+# ruff: noqa: S606, S404, S603, PLR0913
 from __future__ import annotations
 
 import os
@@ -5,7 +6,6 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 import click
 
@@ -14,24 +14,21 @@ class ContainerError(RuntimeError):
     """Raised when the Apple container subsystem or CLI fails."""
 
 
-def _run(cmd: List[str], *, check: bool = True, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], *, check: bool = True, capture_output: bool = False
+) -> subprocess.CompletedProcess[str]:
     """
     Thin wrapper around subprocess.run with sane defaults.
 
     Args:
         cmd: Command and arguments.
-        check: If True, raise on non–zero exit.
+        check: If True, raise on non-zero exit.
         capture_output: If True, capture and return stdout/stderr.
 
     Returns:
         subprocess.CompletedProcess
     """
-    return subprocess.run(
-        cmd,
-        text=True,
-        capture_output=capture_output,
-        check=check,
-    )
+    return subprocess.run(cmd, text=True, capture_output=capture_output, check=check)
 
 
 def ensure_container_running(auto_start: bool = True) -> None:
@@ -57,9 +54,16 @@ def ensure_container_running(auto_start: bool = True) -> None:
         return
 
     if not auto_start:
-        raise ContainerError("Apple container subsystem is not running. Start it with: container system start")
+        raise ContainerError(
+            "Apple container subsystem is not running. "
+            "Start it with: container system start"
+        )
 
-    click.echo(click.style("Apple container subsystem is not running – starting it now…", fg="yellow"))
+    click.echo(
+        click.style(
+            "Apple container subsystem is not running - starting it now…", fg="yellow"
+        )
+    )
     try:
         _run(["container", "system", "start"])
     except subprocess.CalledProcessError as exc:
@@ -168,17 +172,19 @@ def main(
     if shell:
         container_cmd.append("/bin/bash")
     else:
-        container_cmd.extend(
-            [
-                uv_path,
-                "run",
-                "--isolated",
-                codex_path,
-                *extra,  # User-supplied passthrough args for Codex
-            ]
-        )
+        container_cmd.extend([
+            uv_path,
+            "run",
+            "--isolated",
+            codex_path,
+            *extra,  # User-supplied passthrough args for Codex
+        ])
 
-    click.echo(click.style("Executing:", fg="green") + " " + " ".join(map(shlex.quote, container_cmd)))
+    click.echo(
+        click.style("Executing:", fg="green")
+        + " "
+        + " ".join(map(shlex.quote, container_cmd))
+    )
     # Execute the container; replace current process (no return).
     os.execvp(container_cmd[0], container_cmd)
 
