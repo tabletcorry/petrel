@@ -214,4 +214,3 @@ def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> No
     result = runner.invoke(main, ["codex"])
     assert result.exit_code == 1
     assert "brew install container" in result.output
-
