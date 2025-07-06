@@ -1,6 +1,7 @@
 # ruff: noqa: S606, S404, S603, PLR0913
 from __future__ import annotations
 
+import hashlib
 import os
 import shlex
 import subprocess
@@ -159,6 +160,19 @@ def codex(
     # Ensure the persistent directory exists so `--mount src=…` never errors.
     persistent_dir.mkdir(parents=True, exist_ok=True)
 
+    # Ensure a per-repo cache for Python venv in ~/.cache/petrel/<repo>-<hash>/.venv
+    cache_base = Path.home() / ".cache" / "petrel"
+    cache_base.mkdir(parents=True, exist_ok=True)
+    # Use repo name plus an 8-char hash of its absolute path to avoid collisions
+    repo_key = hashlib.sha256(str(repo_dir.resolve()).encode()).hexdigest()[:8]
+    repo_cache = cache_base / f"{repo_dir.resolve().name}-{repo_key}"
+    repo_cache.mkdir(parents=True, exist_ok=True)
+    venv_cache_dir = repo_cache / ".venv"
+    venv_cache_dir.mkdir(parents=True, exist_ok=True)
+
+    uv_cache_dir = cache_base / "uv_cache"
+    uv_cache_dir.mkdir(parents=True, exist_ok=True)
+
     # Construct the base container command.
     container_cmd: list[str] = [
         "container",
@@ -167,10 +181,12 @@ def codex(
         name,
         "--rm",
         "-it",
-        "--mount",
-        f"src={persistent_dir},dst={dest_dir}",
         "-v",
         f"{repo_dir}:/home/linuxbrew/repo",
+        "--mount",
+        f"src={persistent_dir},dst={dest_dir}",
+        "--mount",
+        f"src={uv_cache_dir},dst=/home/linuxbrew/.uv_cache",
         image,
     ]
 

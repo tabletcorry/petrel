@@ -28,7 +28,23 @@ RUN brew install codex uv && \
 
 USER root
 RUN echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' \
-      >  /etc/profile.d/brew.sh
+      >>  /home/linuxbrew/.profile
+
+ENV UV_PROJECT_ENVIRONMENT=/home/linuxbrew/.uv_venv
+RUN echo 'export UV_PROJECT_ENVIRONMENT=/home/linuxbrew/.uv_venv' \
+      >>  /home/linuxbrew/.profile
+
+ENV UV_CACHE_DIR=/home/linuxbrew/.uv_cache/uv
+RUN echo 'export UV_CACHE_DIR=/home/linuxbrew/.uv_cache/uv' \
+      >>  /home/linuxbrew/.profile
+
+ENV UV_LINK_MODE=copy
+RUN echo 'export UV_LINK_MODE=copy' \
+      >>  /home/linuxbrew/.profile  \
+
+ENV UV_PYTHON_CACHE_DIR=/home/linuxbrew/.uv_cache/python
+RUN echo 'export UV_PYTHON_CACHE_DIR=/home/linuxbrew/.uv_cache/python' \
+      >>  /home/linuxbrew/.profile
 
 USER linuxbrew
 WORKDIR /home/linuxbrew/repo
