@@ -185,9 +185,9 @@ def codex(
 
     # Verify that the container image exists; prompt to build if missing.
     image_check = _run(
-        ["container", "images", "list", image], check=False, capture_output=True
+        ["container", "images", "inspect", image], check=False, capture_output=True
     )
-    if image_check.returncode != 0 or image not in image_check.stdout:
+    if image_check.returncode != 0:
         if click.confirm(
             f"Container image '{image}' not found. Build it now?", default=True
         ):

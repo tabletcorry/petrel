@@ -229,8 +229,8 @@ def test_cli_codex_builds_when_image_missing(monkeypatch: pytest.MonkeyPatch) ->
         calls.append(cmd)
         if cmd[:3] == ["container", "system", "status"]:
             return DummyCompleted(stdout="running")
-        if cmd[:3] == ["container", "images", "list"]:
-            return DummyCompleted(stdout="")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            return DummyCompleted(stdout="", returncode=1)
         if cmd[:2] == ["container", "build"]:
             return DummyCompleted(stdout="")
         raise AssertionError(f"Unexpected command: {cmd}")
@@ -252,8 +252,8 @@ def test_cli_codex_abort_when_image_missing(monkeypatch: pytest.MonkeyPatch) -> 
         _ = check, capture_output
         if cmd[:3] == ["container", "system", "status"]:
             return DummyCompleted(stdout="running")
-        if cmd[:3] == ["container", "images", "list"]:
-            return DummyCompleted(stdout="")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            return DummyCompleted(stdout="", returncode=1)
         raise AssertionError(f"Unexpected command: {cmd}")
 
     monkeypatch.setattr(main_module, "_run", fake_run)
