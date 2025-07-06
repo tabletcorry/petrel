@@ -6,9 +6,16 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
+from importlib import resources
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from importlib.resources.abc import Traversable
 from pathlib import Path
 
 import click
+import jinja2
 
 
 class ContainerError(RuntimeError):
@@ -30,6 +37,18 @@ def _run(
         subprocess.CompletedProcess
     """
     return subprocess.run(cmd, text=True, capture_output=capture_output, check=check)
+
+
+def render_template(
+    template_path: Path | Traversable, context: dict[str, str] | None = None
+) -> str:
+    """Render a Jinja2 template using the provided context or environment."""
+    env = jinja2.Environment(autoescape=False)  # noqa: S701
+    data = template_path.read_text(encoding="utf-8")
+    if context is None:
+        context = dict(os.environ)
+    template = env.from_string(data)
+    return template.render(**context)
 
 
 def ensure_container_running(auto_start: bool = True) -> None:
@@ -200,6 +219,25 @@ def codex(
     os.execvp(container_cmd[0], container_cmd)
 
 
+@main.command(
+    name="dockerfile", context_settings={"help_option_names": ["-h", "--help"]}
+)
+@click.option(
+    "--file",
+    "-f",
+    "dockerfile_template",
+    type=click.Path(path_type=Path, exists=True, file_okay=True, dir_okay=False),
+    default=None,
+    show_default=False,
+    help="Path to the Dockerfile template. Defaults to the built-in template.",
+)
+def dockerfile_cmd(dockerfile_template: Path | Traversable | None) -> None:
+    """Print the rendered Dockerfile template."""
+    if dockerfile_template is None:
+        dockerfile_template = resources.files(__package__).joinpath("Dockerfile.j2")
+    click.echo(render_template(dockerfile_template))
+
+
 @main.command(name="build", context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--tag",
@@ -211,11 +249,11 @@ def codex(
 @click.option(
     "--file",
     "-f",
-    "dockerfile",
+    "dockerfile_template",
     type=click.Path(path_type=Path, exists=True, file_okay=True, dir_okay=False),
-    default=Path("Dockerfile"),
-    show_default=True,
-    help="Path to the Dockerfile.",
+    default=None,
+    show_default=False,
+    help="Path to the Dockerfile template. Defaults to the built-in template.",
 )
 @click.option(
     "--context",
@@ -229,19 +267,45 @@ def codex(
     is_flag=True,
     help="Do not attempt to auto-start the container subsystem; error instead.",
 )
-def build(tag: str, dockerfile: Path, context: Path, no_auto_start: bool) -> None:
-    """Build the container image using the Dockerfile."""
+def build(
+    tag: str,
+    dockerfile_template: Path | Traversable | None,
+    context: Path,
+    no_auto_start: bool,
+) -> None:
+    """Build the container image using the Dockerfile template."""
     try:
         ensure_container_running(auto_start=not no_auto_start)
     except ContainerError as exc:
         click.echo(click.style(f"Error: {exc}", fg="red"), err=True)
         sys.exit(1)
 
-    cmd = ["container", "build", "--tag", tag, "--file", str(dockerfile), str(context)]
-    click.echo(
-        click.style("Executing:", fg="green") + " " + " ".join(map(shlex.quote, cmd))
-    )
-    _run(cmd)
+    if dockerfile_template is None:
+        dockerfile_template = resources.files(__package__).joinpath("Dockerfile.j2")
+
+    rendered = render_template(dockerfile_template)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as tmpfile:
+        tmpfile.write(rendered)
+        tmpfile_path = Path(tmpfile.name)
+
+    try:
+        cmd = [
+            "container",
+            "build",
+            "--tag",
+            tag,
+            "--file",
+            str(tmpfile_path),
+            str(context),
+        ]
+        click.echo(
+            click.style("Executing:", fg="green")
+            + " "
+            + " ".join(map(shlex.quote, cmd))
+        )
+        _run(cmd)
+    finally:
+        tmpfile_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
