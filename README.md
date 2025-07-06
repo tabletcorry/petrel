@@ -3,6 +3,8 @@
 Petrel provides a simple CLI for running OpenAI Codex inside the Apple
 container subsystem.
 
+Uses its own folder for Codex state, shared with all containers.
+
 ## Installation
 
 Install Petrel using [uv](https://github.com/astral-sh/uv):
@@ -12,6 +14,18 @@ uv tool install https://github.com/tabletcorry/petrel.git
 ```
 
 This installs the `petrel` command into your uv tools directory.
+
+## Usage
+
+```bash
+# Optional: If you don't do this, you will need to setup credentials once in a container.
+cp -r ~/.codex ~/.codex-container
+
+# Only required once, or after petrel/codex updates, to build the docker image.
+petrel build
+
+# Runs Codex, inside a container, for the current directory.
+petrel codex
 
 ## Commands
 
