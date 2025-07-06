@@ -52,4 +52,5 @@ ignore_missing_imports = false
 dev = [
     "mypy>=1.16.1",
     "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
 ]
