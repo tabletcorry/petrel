@@ -4,12 +4,17 @@ import shutil
 
 # ruff: noqa: S101
 import subprocess  # noqa: S404 -- used in testing
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from importlib.resources.abc import Traversable
 
 import pytest
 from click.testing import CliRunner
 
 import petrel.main as main_module
-from petrel.main import ContainerError, ensure_container_running, main
+from petrel.main import ContainerError, ensure_container_running, main, render_template
 
 
 class DummyCompleted(subprocess.CompletedProcess[str]):
@@ -137,7 +142,7 @@ def test_cli_build_help() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["build", "--help"])
     assert result.exit_code == 0
-    assert "Build the container image using the Dockerfile." in result.output
+    assert "Build the container image using the Dockerfile template." in result.output
 
 
 def test_cli_build_error_when_not_running(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -152,9 +157,61 @@ def test_cli_build_error_when_not_running(monkeypatch: pytest.MonkeyPatch) -> No
     assert "Error: failed to start" in result.output
 
 
+def test_render_template_basic(tmp_path: Path) -> None:
+    tpl = tmp_path / "Dockerfile.j2"
+    tpl.write_text("Hello {{ name }}")
+    rendered = render_template(tpl, {"name": "World"})
+    assert rendered == "Hello World"
+
+
+def test_cli_dockerfile_outputs_rendered(tmp_path: Path) -> None:
+    tpl = tmp_path / "Dockerfile.j2"
+    tpl.write_text("FROM python")
+    runner = CliRunner()
+    result = runner.invoke(main, ["dockerfile", "--file", str(tpl)])
+    assert result.exit_code == 0
+    assert result.output.strip() == "FROM python"
+
+
+def test_cli_dockerfile_default_uses_package_template() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["dockerfile"])
+    assert result.exit_code == 0
+    assert "FROM debian:latest" in result.output
+
+
+def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+
+    def fake_render(
+        path: Path | Traversable, _context: dict[str, str] | None = None
+    ) -> str:
+        calls["template"] = path
+        return "FROM python"
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls["cmd"] = cmd
+        return DummyCompleted(stdout="")
+
+    monkeypatch.setattr(main_module, "render_template", fake_render)
+    monkeypatch.setattr(main_module, "_run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["build", "--context", str(Path.cwd())])
+    assert result.exit_code == 0
+    dockerfile_index = calls["cmd"].index("--file") + 1
+    dockerfile_path = Path(calls["cmd"][dockerfile_index])
+    assert not dockerfile_path.exists()
+    assert dockerfile_path.name.startswith("tmp")
+
+
 def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     runner = CliRunner()
     result = runner.invoke(main, ["codex"])
     assert result.exit_code == 1
     assert "brew install container" in result.output
+
