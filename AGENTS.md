@@ -14,5 +14,5 @@ Create pytest unit tests for all new code.
   - Run `uv run ruff check ...` to check for linting and other issues.
   - Run `uv run mypy ...` to check for type issues.
   - Run `uv run pytest` to run tests.
-  - Use `pre-commit run --files ...` to check that your changes pass the pre-commit checks. Run this last.
+  - Use `uv run pre-commit run --files ...` to check that your changes pass the pre-commit checks. Run this last.
 - Add or update tests for the code you change, even if nobody asked.
