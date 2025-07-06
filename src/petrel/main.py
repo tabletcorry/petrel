@@ -111,12 +111,6 @@ def main() -> None:
     help="Container image name (tag may be appended, e.g. 'codex:latest').",
 )
 @click.option(
-    "--uv-path",
-    default="/home/linuxbrew/.linuxbrew/bin/uv",
-    show_default=True,
-    help="Path to the 'uv' wrapper binary inside the container.",
-)
-@click.option(
     "--codex-path",
     default="/home/linuxbrew/.linuxbrew/bin/codex",
     show_default=True,
@@ -140,7 +134,6 @@ def codex(
     dest_dir: str,
     repo_dir: Path,
     image: str,
-    uv_path: str,
     codex_path: str,
     shell: bool,
     no_auto_start: bool,
@@ -194,9 +187,6 @@ def codex(
         container_cmd.append("/bin/bash")
     else:
         container_cmd.extend([
-            uv_path,
-            "run",
-            "--isolated",
             codex_path,
             *extra,  # User-supplied passthrough args for Codex
         ])
