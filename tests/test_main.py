@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 import shutil
 
 # ruff: noqa: S101
 import subprocess  # noqa: S404 -- used in testing
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import click
 
 if TYPE_CHECKING:
     from importlib.resources.abc import Traversable
@@ -214,3 +217,48 @@ def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> No
     result = runner.invoke(main, ["codex"])
     assert result.exit_code == 1
     assert "brew install container" in result.output
+
+
+def test_cli_codex_builds_when_image_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls.append(cmd)
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            return DummyCompleted(stdout="", returncode=1)
+        if cmd[:2] == ["container", "build"]:
+            return DummyCompleted(stdout="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(click, "confirm", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(os, "execvp", lambda _prog, _args: None)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["codex"])
+    assert result.exit_code == 0
+    assert any(call[:2] == ["container", "build"] for call in calls)
+
+
+def test_cli_codex_abort_when_image_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            return DummyCompleted(stdout="", returncode=1)
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(click, "confirm", lambda *_args, **_kwargs: False)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["codex"])
+    assert result.exit_code == 1

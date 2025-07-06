@@ -183,6 +183,30 @@ def codex(
         click.echo(click.style(f"Error: {exc}", fg="red"), err=True)
         sys.exit(1)
 
+    # Verify that the container image exists; prompt to build if missing.
+    image_check = _run(
+        ["container", "images", "inspect", image], check=False, capture_output=True
+    )
+    if image_check.returncode != 0:
+        if click.confirm(
+            f"Container image '{image}' not found. Build it now?", default=True
+        ):
+            # Reuse the build command with default template and context
+            build.callback(  # type: ignore[misc]
+                tag=image,
+                dockerfile_template=None,
+                context=Path(),
+                no_auto_start=no_auto_start,
+            )
+        else:
+            click.echo(
+                click.style(
+                    f"Image '{image}' is required but was not built.", fg="red"
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
     # Ensure the persistent directory exists so `--mount src=…` never errors.
     persistent_dir.mkdir(parents=True, exist_ok=True)
 
