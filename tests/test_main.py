@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+
 # ruff: noqa: S101
 import subprocess  # noqa: S404 -- used in testing
 from pathlib import Path
@@ -204,3 +206,12 @@ def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
     dockerfile_path = Path(calls["cmd"][dockerfile_index])
     assert not dockerfile_path.exists()
     assert dockerfile_path.name.startswith("tmp")
+
+
+def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
+    runner = CliRunner()
+    result = runner.invoke(main, ["codex"])
+    assert result.exit_code == 1
+    assert "brew install container" in result.output
+

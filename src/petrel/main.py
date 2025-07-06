@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -91,8 +92,21 @@ def ensure_container_running(auto_start: bool = True) -> None:
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
-def main() -> None:
+@click.pass_context
+def main(ctx: click.Context) -> None:
     """Petrel CLI entry point."""
+    if shutil.which("container") is None:
+        click.echo(
+            click.style(
+                (
+                    "The 'container' program was not found. Install it first "
+                    "(e.g. `brew install container`)."
+                ),
+                fg="red",
+            ),
+            err=True,
+        )
+        ctx.exit(1)
 
 
 @main.command(name="codex", context_settings={"help_option_names": ["-h", "--help"]})
