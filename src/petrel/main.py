@@ -63,15 +63,16 @@ def ensure_container_running(auto_start: bool = True) -> None:
         ContainerError: When the subsystem is not running and cannot be started.
     """
     try:
-        status_cp = _run(["container", "system", "status"], capture_output=True)
+        status_cp = _run(
+            ["container", "system", "status"], check=False, capture_output=True
+        )
     except FileNotFoundError as exc:
         raise ContainerError(
             "The 'container' CLI was not found. "
             "Ensure you are running macOS with the new Apple container subsystem."
         ) from exc
 
-    status = status_cp.stdout.strip().lower()
-    if "running" in status:
+    if status_cp.returncode == 0:
         return
 
     if not auto_start:
