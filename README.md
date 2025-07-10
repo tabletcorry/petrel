@@ -55,6 +55,7 @@ Build the container image from the Dockerfile template. Useful options are:
 - `--file` – path to a Dockerfile template.
 - `--context` – build context directory.
 - `--no-auto-start` – do not start the container subsystem automatically.
+- `--rebuild` – build the image from scratch without using cache.
 
 Petrel checks that the Apple container subsystem is running before executing
 commands. If the subsystem is stopped and `--no-auto-start` is not given, Petrel

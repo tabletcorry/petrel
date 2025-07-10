@@ -197,6 +197,7 @@ def codex(
                 tag=image,
                 dockerfile_template=None,
                 context=Path(),
+                rebuild=False,
                 no_auto_start=no_auto_start,
             )
         else:
@@ -302,6 +303,11 @@ def dockerfile_cmd(dockerfile_template: Path | Traversable | None) -> None:
     help="Build context directory.",
 )
 @click.option(
+    "--rebuild",
+    is_flag=True,
+    help="Force a full rebuild without using any cached layers.",
+)
+@click.option(
     "--no-auto-start",
     is_flag=True,
     help="Do not attempt to auto-start the container subsystem; error instead.",
@@ -310,6 +316,7 @@ def build(
     tag: str,
     dockerfile_template: Path | Traversable | None,
     context: Path,
+    rebuild: bool,
     no_auto_start: bool,
 ) -> None:
     """Build the container image using the Dockerfile template."""
@@ -337,6 +344,8 @@ def build(
             str(tmpfile_path),
             str(context),
         ]
+        if rebuild:
+            cmd.insert(2, "--no-cache")
         click.echo(
             click.style("Executing:", fg="green")
             + " "
