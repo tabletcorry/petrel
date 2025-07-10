@@ -13,7 +13,8 @@ Install Petrel using [uv](https://github.com/astral-sh/uv):
 uv tool install https://github.com/tabletcorry/petrel.git
 ```
 
-This installs the `petrel` command into your uv tools directory.
+This installs the `petrel` command into your uv tools directory. Use
+`petrel --version` to check the installed version.
 
 ## Usage
 

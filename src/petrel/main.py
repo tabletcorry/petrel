@@ -11,6 +11,8 @@ import tempfile
 from importlib import resources
 from typing import TYPE_CHECKING
 
+from . import __version__
+
 if TYPE_CHECKING:
     from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -92,6 +94,7 @@ def ensure_container_running(auto_start: bool = True) -> None:
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(__version__)
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Petrel CLI entry point."""

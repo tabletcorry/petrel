@@ -17,6 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 import petrel.main as main_module
+from petrel import __version__
 from petrel.main import ContainerError, ensure_container_running, main, render_template
 
 
@@ -132,6 +133,13 @@ def test_cli_help() -> None:
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "Usage" in result.output
+
+
+def test_cli_version() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.output
 
 
 def test_cli_codex_help() -> None:
