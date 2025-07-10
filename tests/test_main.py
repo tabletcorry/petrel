@@ -211,6 +211,31 @@ def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
     assert dockerfile_path.name.startswith("tmp")
 
 
+def test_cli_build_rebuild_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+
+    def fake_render(
+        path: Path | Traversable, _context: dict[str, str] | None = None
+    ) -> str:
+        calls["template"] = path
+        return "FROM python"
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls["cmd"] = cmd
+        return DummyCompleted(stdout="")
+
+    monkeypatch.setattr(main_module, "render_template", fake_render)
+    monkeypatch.setattr(main_module, "_run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["build", "--context", str(Path.cwd()), "--rebuild"])
+    assert result.exit_code == 0
+    assert "--no-cache" in calls["cmd"]
+
+
 def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     runner = CliRunner()
