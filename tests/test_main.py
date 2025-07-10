@@ -77,7 +77,7 @@ def test_ensure_container_running_no_auto_start_when_stopped(
         _cmd: list[str], check: bool = True, capture_output: bool = True
     ) -> DummyCompleted:
         _ = check, capture_output, _cmd
-        return DummyCompleted(stdout="stopped")
+        return DummyCompleted(stdout="stopped", returncode=1)
 
     monkeypatch.setattr(main_module, "_run", fake_run)
     with pytest.raises(ContainerError) as excinfo:
@@ -99,7 +99,7 @@ def test_ensure_container_running_auto_start_success(
         _ = check, capture_output
         calls.append(cmd)
         if cmd[:3] == ["container", "system", "status"]:
-            return DummyCompleted(stdout="stopped")
+            return DummyCompleted(stdout="stopped", returncode=1)
         if cmd[:3] == ["container", "system", "start"]:
             return DummyCompleted(stdout="")
         pytest.skip(f"Unexpected command: {cmd}")
@@ -118,7 +118,7 @@ def test_ensure_container_running_auto_start_failure(
     ) -> DummyCompleted:
         _ = check, capture_output
         if cmd[:3] == ["container", "system", "status"]:
-            return DummyCompleted(stdout="stopped")
+            return DummyCompleted(stdout="stopped", returncode=1)
         raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
 
     monkeypatch.setattr(main_module, "_run", fake_run)
