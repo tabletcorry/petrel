@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -50,6 +51,20 @@ def render_template(
         context = dict(os.environ)
     template = env.from_string(data)
     return template.render(**context)
+
+
+def get_codex_version() -> str | None:
+    """Return the installed Codex CLI version or ``None`` if unavailable."""
+    try:
+        cp = _run(["codex", "--version"], check=False, capture_output=True)
+    except FileNotFoundError:
+        return None
+    if cp.returncode != 0:
+        return None
+    match = re.search(r"(\d+\.\d+\.\d+)", cp.stdout)
+    if match:
+        return match.group(1)
+    return None
 
 
 def ensure_container_running(auto_start: bool = True) -> None:
@@ -207,6 +222,25 @@ def codex(
             )
             sys.exit(1)
 
+    codex_version = get_codex_version()
+    if codex_version is not None:
+        repo = image.split(":", maxsplit=1)[0]
+        version_tag = f"{repo}:{codex_version}"
+        version_check = _run(
+            ["container", "images", "inspect", version_tag],
+            check=False,
+            capture_output=True,
+        )
+        if version_check.returncode != 0 and click.confirm(
+            f"Container image '{version_tag}' not found. Build it now?", default=True
+        ):
+            build.callback(  # type: ignore[misc]
+                tag=repo,
+                dockerfile_template=None,
+                context=Path(),
+                no_auto_start=no_auto_start,
+            )
+
     # Ensure the persistent directory exists so `--mount src=…` never errors.
     persistent_dir.mkdir(parents=True, exist_ok=True)
 
@@ -321,21 +355,26 @@ def build(
     if dockerfile_template is None:
         dockerfile_template = resources.files(__package__).joinpath("Dockerfile.j2")
 
-    rendered = render_template(dockerfile_template)
+    codex_version = get_codex_version()
+    rendered = render_template(
+        dockerfile_template, {"codex_version": codex_version or ""}
+    )
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as tmpfile:
         tmpfile.write(rendered)
         tmpfile_path = Path(tmpfile.name)
 
     try:
-        cmd = [
-            "container",
-            "build",
+        base_repo = tag.split(":", maxsplit=1)[0]
+        cmd = ["container", "build"]
+        if codex_version:
+            cmd.extend(["--tag", f"{base_repo}:{codex_version}"])
+        cmd.extend([
             "--tag",
-            tag,
+            f"{base_repo}:latest",
             "--file",
             str(tmpfile_path),
             str(context),
-        ]
+        ])
         click.echo(
             click.style("Executing:", fg="green")
             + " "

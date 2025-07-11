@@ -17,7 +17,13 @@ import pytest
 from click.testing import CliRunner
 
 import petrel.main as main_module
-from petrel.main import ContainerError, ensure_container_running, main, render_template
+from petrel.main import (
+    ContainerError,
+    ensure_container_running,
+    get_codex_version,
+    main,
+    render_template,
+)
 
 
 class DummyCompleted(subprocess.CompletedProcess[str]):
@@ -39,6 +45,18 @@ def test_run_no_check() -> None:
 def test_run_check_raises() -> None:
     with pytest.raises(subprocess.CalledProcessError):
         main_module._run(["false"], check=True, capture_output=True)  # noqa: SLF001
+
+
+def test_get_codex_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        assert cmd == ["codex", "--version"]
+        return DummyCompleted(stdout="codex-cli 9.9.9")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    assert get_codex_version() == "9.9.9"
 
 
 def test_ensure_container_running_cli_not_found(
@@ -211,6 +229,33 @@ def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
     assert dockerfile_path.name.startswith("tmp")
 
 
+def test_cli_build_tags_include_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.2.3")
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        calls["cmd"] = cmd
+        return DummyCompleted(stdout="")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(
+        main_module, "render_template", lambda *_args, **_kwargs: "FROM python"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["build", "--context", str(Path.cwd()), "--tag", "codex"]
+    )
+    assert result.exit_code == 0
+    assert any(part.startswith("codex:1.2.3") for part in calls["cmd"])
+
+
 def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     runner = CliRunner()
@@ -227,6 +272,8 @@ def test_cli_codex_builds_when_image_missing(monkeypatch: pytest.MonkeyPatch) ->
     ) -> DummyCompleted:
         _ = check, capture_output
         calls.append(cmd)
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.0.0")
         if cmd[:3] == ["container", "system", "status"]:
             return DummyCompleted(stdout="running")
         if cmd[:3] == ["container", "images", "inspect"]:
@@ -250,6 +297,8 @@ def test_cli_codex_abort_when_image_missing(monkeypatch: pytest.MonkeyPatch) -> 
         cmd: list[str], check: bool = True, capture_output: bool = False
     ) -> DummyCompleted:
         _ = check, capture_output
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.0.0")
         if cmd[:3] == ["container", "system", "status"]:
             return DummyCompleted(stdout="running")
         if cmd[:3] == ["container", "images", "inspect"]:
@@ -262,3 +311,63 @@ def test_cli_codex_abort_when_image_missing(monkeypatch: pytest.MonkeyPatch) -> 
     runner = CliRunner()
     result = runner.invoke(main, ["codex"])
     assert result.exit_code == 1
+
+
+def test_cli_codex_rebuild_for_new_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls.append(cmd)
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.2.3")
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            if cmd[3].endswith("1.2.3"):
+                return DummyCompleted(stdout="", returncode=1)
+            return DummyCompleted(stdout="")
+        if cmd[:2] == ["container", "build"]:
+            return DummyCompleted(stdout="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(click, "confirm", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(os, "execvp", lambda _prog, _args: None)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["codex"])
+    assert result.exit_code == 0
+    assert any(call[:2] == ["container", "build"] for call in calls)
+
+
+def test_cli_codex_skip_rebuild_for_new_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls.append(cmd)
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.2.3")
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            if cmd[3].endswith("1.2.3"):
+                return DummyCompleted(stdout="", returncode=1)
+            return DummyCompleted(stdout="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(click, "confirm", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(os, "execvp", lambda _prog, _args: None)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["codex"])
+    assert result.exit_code == 0
+    assert not any(call[:2] == ["container", "build"] for call in calls)
