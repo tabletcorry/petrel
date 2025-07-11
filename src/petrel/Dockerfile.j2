@@ -22,6 +22,8 @@ RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/instal
 # Put brew on PATH for subsequent layers
 ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}"
 
+ARG CODEX_VERSION="{{ codex_version }}"
+
 RUN brew install codex uv && \
     brew cleanup --prune=all --scrub && \
     rm -rf "$(brew --cache)"
