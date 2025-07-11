@@ -95,7 +95,7 @@ def test_ensure_container_running_no_auto_start_when_stopped(
         _cmd: list[str], check: bool = True, capture_output: bool = True
     ) -> DummyCompleted:
         _ = check, capture_output, _cmd
-        return DummyCompleted(stdout="stopped")
+        return DummyCompleted(stdout="stopped", returncode=1)
 
     monkeypatch.setattr(main_module, "_run", fake_run)
     with pytest.raises(ContainerError) as excinfo:
@@ -117,7 +117,7 @@ def test_ensure_container_running_auto_start_success(
         _ = check, capture_output
         calls.append(cmd)
         if cmd[:3] == ["container", "system", "status"]:
-            return DummyCompleted(stdout="stopped")
+            return DummyCompleted(stdout="stopped", returncode=1)
         if cmd[:3] == ["container", "system", "start"]:
             return DummyCompleted(stdout="")
         pytest.skip(f"Unexpected command: {cmd}")
@@ -136,7 +136,7 @@ def test_ensure_container_running_auto_start_failure(
     ) -> DummyCompleted:
         _ = check, capture_output
         if cmd[:3] == ["container", "system", "status"]:
-            return DummyCompleted(stdout="stopped")
+            return DummyCompleted(stdout="stopped", returncode=1)
         raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
 
     monkeypatch.setattr(main_module, "_run", fake_run)
@@ -254,6 +254,31 @@ def test_cli_build_tags_include_version(monkeypatch: pytest.MonkeyPatch) -> None
     )
     assert result.exit_code == 0
     assert any(part.startswith("codex:1.2.3") for part in calls["cmd"])
+
+
+def test_cli_build_rebuild_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+
+    def fake_render(
+        path: Path | Traversable, _context: dict[str, str] | None = None
+    ) -> str:
+        calls["template"] = path
+        return "FROM python"
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls["cmd"] = cmd
+        return DummyCompleted(stdout="")
+
+    monkeypatch.setattr(main_module, "render_template", fake_render)
+    monkeypatch.setattr(main_module, "_run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["build", "--context", str(Path.cwd()), "--rebuild"])
+    assert result.exit_code == 0
+    assert "--no-cache" in calls["cmd"]
 
 
 def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> None:

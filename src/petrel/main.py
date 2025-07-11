@@ -78,15 +78,16 @@ def ensure_container_running(auto_start: bool = True) -> None:
         ContainerError: When the subsystem is not running and cannot be started.
     """
     try:
-        status_cp = _run(["container", "system", "status"], capture_output=True)
+        status_cp = _run(
+            ["container", "system", "status"], check=False, capture_output=True
+        )
     except FileNotFoundError as exc:
         raise ContainerError(
             "The 'container' CLI was not found. "
             "Ensure you are running macOS with the new Apple container subsystem."
         ) from exc
 
-    status = status_cp.stdout.strip().lower()
-    if "running" in status:
+    if status_cp.returncode == 0:
         return
 
     if not auto_start:
@@ -211,6 +212,7 @@ def codex(
                 tag=image,
                 dockerfile_template=None,
                 context=Path(),
+                rebuild=False,
                 no_auto_start=no_auto_start,
             )
         else:
@@ -238,6 +240,7 @@ def codex(
                 tag=repo,
                 dockerfile_template=None,
                 context=Path(),
+                rebuild=False,
                 no_auto_start=no_auto_start,
             )
 
@@ -335,6 +338,11 @@ def dockerfile_cmd(dockerfile_template: Path | Traversable | None) -> None:
     help="Build context directory.",
 )
 @click.option(
+    "--rebuild",
+    is_flag=True,
+    help="Force a full rebuild without using any cached layers.",
+)
+@click.option(
     "--no-auto-start",
     is_flag=True,
     help="Do not attempt to auto-start the container subsystem; error instead.",
@@ -343,6 +351,7 @@ def build(
     tag: str,
     dockerfile_template: Path | Traversable | None,
     context: Path,
+    rebuild: bool,
     no_auto_start: bool,
 ) -> None:
     """Build the container image using the Dockerfile template."""
@@ -375,6 +384,8 @@ def build(
             str(tmpfile_path),
             str(context),
         ])
+        if rebuild:
+            cmd.insert(2, "--no-cache")
         click.echo(
             click.style("Executing:", fg="green")
             + " "
