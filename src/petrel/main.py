@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -233,8 +234,20 @@ def codex(
             check=False,
             capture_output=True,
         )
-        if version_check.returncode != 0 and click.confirm(
-            f"Container image '{version_tag}' not found. Build it now?", default=True
+        latest_check = _run(
+            ["container", "images", "inspect", f"{repo}:latest"],
+            check=False,
+            capture_output=True,
+        )
+        latest_tags: list[str] = []
+        if latest_check.returncode == 0:
+            try:
+                latest_tags = json.loads(latest_check.stdout)[0].get("RepoTags", [])
+            except (json.JSONDecodeError, IndexError, AttributeError, KeyError):
+                latest_tags = []
+        needs_build = version_check.returncode != 0 or version_tag not in latest_tags
+        if needs_build and click.confirm(
+            f"Container image '{repo}:latest' is outdated. Build it now?", default=True
         ):
             build.callback(  # type: ignore[misc]
                 tag=repo,

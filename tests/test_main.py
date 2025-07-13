@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 
@@ -396,3 +397,37 @@ def test_cli_codex_skip_rebuild_for_new_version(
     result = runner.invoke(main, ["codex"])
     assert result.exit_code == 0
     assert not any(call[:2] == ["container", "build"] for call in calls)
+
+
+def test_cli_codex_prompt_when_latest_outdated(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls.append(cmd)
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.2.3")
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            tag = cmd[3]
+            if tag.endswith("latest") or tag == "codex":
+                data = [{"RepoTags": ["codex:latest", "codex:1.2.0"]}]
+                return DummyCompleted(stdout=json.dumps(data))
+            if tag.endswith("1.2.3"):
+                data = [{"RepoTags": ["codex:1.2.3"]}]
+                return DummyCompleted(stdout=json.dumps(data))
+        if cmd[:2] == ["container", "build"]:
+            return DummyCompleted(stdout="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(click, "confirm", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(os, "execvp", lambda _prog, _args: None)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["codex"])
+    assert result.exit_code == 0
+    assert any(call[:2] == ["container", "build"] for call in calls)
