@@ -203,7 +203,7 @@ def test_cli_dockerfile_default_uses_package_template() -> None:
 
 
 def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, Any] = {}
+    calls: dict[str, Any] = {"cmds": []}
 
     def fake_render(
         path: Path | Traversable, _context: dict[str, str] | None = None
@@ -215,7 +215,7 @@ def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
         cmd: list[str], check: bool = True, capture_output: bool = False
     ) -> DummyCompleted:
         _ = check, capture_output
-        calls["cmd"] = cmd
+        calls["cmds"].append(cmd)
         return DummyCompleted(stdout="")
 
     monkeypatch.setattr(main_module, "render_template", fake_render)
@@ -224,14 +224,15 @@ def test_cli_build_uses_tempfile(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["build", "--context", str(Path.cwd())])
     assert result.exit_code == 0
-    dockerfile_index = calls["cmd"].index("--file") + 1
-    dockerfile_path = Path(calls["cmd"][dockerfile_index])
+    build_cmd = next(c for c in calls["cmds"] if c[:2] == ["container", "build"])
+    dockerfile_index = build_cmd.index("--file") + 1
+    dockerfile_path = Path(build_cmd[dockerfile_index])
     assert not dockerfile_path.exists()
     assert dockerfile_path.name.startswith("tmp")
 
 
 def test_cli_build_tags_include_version(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, Any] = {}
+    calls: dict[str, Any] = {"cmds": []}
 
     def fake_run(
         cmd: list[str], check: bool = True, capture_output: bool = False
@@ -241,7 +242,7 @@ def test_cli_build_tags_include_version(monkeypatch: pytest.MonkeyPatch) -> None
             return DummyCompleted(stdout="codex-cli 1.2.3")
         if cmd[:3] == ["container", "system", "status"]:
             return DummyCompleted(stdout="running")
-        calls["cmd"] = cmd
+        calls["cmds"].append(cmd)
         return DummyCompleted(stdout="")
 
     monkeypatch.setattr(main_module, "_run", fake_run)
@@ -254,11 +255,12 @@ def test_cli_build_tags_include_version(monkeypatch: pytest.MonkeyPatch) -> None
         main, ["build", "--context", str(Path.cwd()), "--tag", "codex"]
     )
     assert result.exit_code == 0
-    assert any(part.startswith("codex:1.2.3") for part in calls["cmd"])
+    build_cmd = next(c for c in calls["cmds"] if c[:2] == ["container", "build"])
+    assert any(part.startswith("codex:1.2.3") for part in build_cmd)
 
 
 def test_cli_build_rebuild_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: dict[str, Any] = {}
+    calls: dict[str, Any] = {"cmds": []}
 
     def fake_render(
         path: Path | Traversable, _context: dict[str, str] | None = None
@@ -270,7 +272,7 @@ def test_cli_build_rebuild_flag(monkeypatch: pytest.MonkeyPatch) -> None:
         cmd: list[str], check: bool = True, capture_output: bool = False
     ) -> DummyCompleted:
         _ = check, capture_output
-        calls["cmd"] = cmd
+        calls["cmds"].append(cmd)
         return DummyCompleted(stdout="")
 
     monkeypatch.setattr(main_module, "render_template", fake_render)
@@ -279,7 +281,8 @@ def test_cli_build_rebuild_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["build", "--context", str(Path.cwd()), "--rebuild"])
     assert result.exit_code == 0
-    assert "--no-cache" in calls["cmd"]
+    build_cmd = next(c for c in calls["cmds"] if c[:2] == ["container", "build"])
+    assert "--no-cache" in build_cmd
 
 
 def test_cli_error_when_container_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -316,6 +319,75 @@ def test_cli_codex_builds_when_image_missing(monkeypatch: pytest.MonkeyPatch) ->
     result = runner.invoke(main, ["codex"])
     assert result.exit_code == 0
     assert any(call[:2] == ["container", "build"] for call in calls)
+
+
+def test_cli_build_applies_missing_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls.append(cmd)
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.2.3")
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:2] == ["container", "build"]:
+            return DummyCompleted(stdout="")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            tag = cmd[3]
+            if tag.endswith("latest"):
+                return DummyCompleted(stdout="")
+            return DummyCompleted(stdout="", returncode=1)
+        if cmd[:3] == ["container", "image", "tag"]:
+            return DummyCompleted(stdout="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(
+        main_module, "render_template", lambda *_args, **_kwargs: "FROM python"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["build", "--context", str(Path.cwd()), "--tag", "codex"]
+    )
+    assert result.exit_code == 0
+    assert ["container", "image", "tag", "codex:latest", "codex:1.2.3"] in calls
+
+
+def test_cli_build_skips_tag_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str], check: bool = True, capture_output: bool = False
+    ) -> DummyCompleted:
+        _ = check, capture_output
+        calls.append(cmd)
+        if cmd[:2] == ["codex", "--version"]:
+            return DummyCompleted(stdout="codex-cli 1.2.3")
+        if cmd[:3] == ["container", "system", "status"]:
+            return DummyCompleted(stdout="running")
+        if cmd[:2] == ["container", "build"]:
+            return DummyCompleted(stdout="")
+        if cmd[:3] == ["container", "images", "inspect"]:
+            return DummyCompleted(stdout="")
+        if cmd[:3] == ["container", "image", "tag"]:
+            return DummyCompleted(stdout="")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(main_module, "_run", fake_run)
+    monkeypatch.setattr(
+        main_module, "render_template", lambda *_args, **_kwargs: "FROM python"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["build", "--context", str(Path.cwd()), "--tag", "codex"]
+    )
+    assert result.exit_code == 0
+    assert not any(call[:3] == ["container", "image", "tag"] for call in calls)
 
 
 def test_cli_codex_abort_when_image_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -356,6 +428,8 @@ def test_cli_codex_rebuild_for_new_version(monkeypatch: pytest.MonkeyPatch) -> N
                 return DummyCompleted(stdout="", returncode=1)
             return DummyCompleted(stdout="")
         if cmd[:2] == ["container", "build"]:
+            return DummyCompleted(stdout="")
+        if cmd[:3] == ["container", "image", "tag"]:
             return DummyCompleted(stdout="")
         raise AssertionError(f"Unexpected command: {cmd}")
 

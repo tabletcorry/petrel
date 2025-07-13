@@ -68,6 +68,27 @@ def get_codex_version() -> str | None:
     return None
 
 
+def _ensure_tags(base_repo: str, codex_version: str | None) -> None:
+    """Apply any missing tags to a built image."""
+    expected = [f"{base_repo}:latest"]
+    if codex_version:
+        expected.insert(0, f"{base_repo}:{codex_version}")
+
+    existing: list[str] = []
+    for tag in expected:
+        cp = _run(
+            ["container", "images", "inspect", tag], check=False, capture_output=True
+        )
+        if cp.returncode == 0:
+            existing.append(tag)
+
+    if existing:
+        source = existing[0]
+        for tag in expected:
+            if tag not in existing:
+                _run(["container", "image", "tag", source, tag])
+
+
 def ensure_container_running(auto_start: bool = True) -> None:
     """
     Verify that the Apple container subsystem is running and optionally start it.
@@ -405,6 +426,7 @@ def build(
             + " ".join(map(shlex.quote, cmd))
         )
         _run(cmd)
+        _ensure_tags(base_repo, codex_version)
     finally:
         tmpfile_path.unlink(missing_ok=True)
 
